@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+
+source "${BASH_SOURCE%/*}/lib/log.sh"
+
+log::info "Updating fzf..."
+
+pushd /alt/.fzf || exit 1
+if git pull; then
+	ln -fs /alt/.fzf/bin/fzf ~/.local/bin/
+	ln -fs /alt/.fzf/bin/fzf-tmux ~/.local/bin/
+	ln -fs /alt/.fzf/bin/fzf-preview.sh ~/.local/bin/
+fi
+popd

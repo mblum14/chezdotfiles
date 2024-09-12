@@ -1,0 +1,4 @@
+[".local/src/tmux"]
+type = "git-repo"
+url = "https://github.com/tmux/tmux.git"
+clone.args = ["--single-branch", "--branch", "3.2a"]

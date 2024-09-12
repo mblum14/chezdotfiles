@@ -1,0 +1,24 @@
+{{- $email := promptStringOnce . "email" "Email address" -}}
+{{- $jira_domain := promptStringOnce . "jira_domain" "Jira domain" -}}
+{{- $github_domain := promptStringOnce . "github_domain" "GitHub Enterprise domain" -}}
+{{- $github_username := promptStringOnce . "github_username" "GitHub Username" -}}
+{{- $dev_mount := promptStringOnce . "dev_mount" "Dev mount" -}}
+{{- $passphrase := promptStringOnce . "passphrase" "passphrase" -}}
+[data]
+  email = {{ $email | quote }}
+  github_domain = {{ $github_domain | quote }}
+  github_enterprise_domain = {{ $github_domain | quote }}
+  github_enterprise_url = "https://{{ $github_domain }}"
+  github_username = {{ $github_username | quote }}
+  jira_domain = {{ $jira_domain | quote }}
+  dev_mount = {{ $dev_mount | quote }}
+  lua_language_server_version = "3.7.4"
+  passphrase = {{ $passphrase | quote }}
+
+[git]
+  autoCommit = false
+
+encryption = "gpg"
+[gpg]
+  symmetric = true
+  args = ["--batch", "--passphrase", {{ $passphrase | quote }}, "--no-symkey-cache"]

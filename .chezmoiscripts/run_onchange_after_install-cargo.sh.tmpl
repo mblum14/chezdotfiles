@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+
+{{ range .packages.cargo -}}
+cargo install {{ . }}
+{{ end -}}
+

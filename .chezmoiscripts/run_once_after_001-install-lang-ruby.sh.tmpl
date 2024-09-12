@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+function install_ruby() {
+  sudo dnf module reset ruby -y
+  eval "$(~/.rbenv/bin/rbenv init -)"
+  rbenv install {{ .languages.ruby }}
+  rbenv global {{ .languages.ruby }}
+}
+
+install_ruby

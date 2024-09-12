@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+# remove tmux installed by dnf
+sudo dnf -y remove tmux
+
+# install
+cd {{ .dev_mount }}/.local/src/tmux
+sh autogen.sh
+./configure
+make && sudo make install

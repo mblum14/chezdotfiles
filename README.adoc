@@ -1,0 +1,8 @@
+= dotfiles
+
+Dotfiles built on link:https://www.chezmoi.io[chezmoi]
+
+[source,bash]
+----
+sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply git@$GITHUB_DOMAIN:$GITHUB_USERNAME/dotfiles.git
+----

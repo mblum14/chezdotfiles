@@ -1,0 +1,4 @@
+[".local/src/neovim"]
+type = "git-repo"
+url = "https://github.com/neovim/neovim.git"
+refreshPeriod = "168h"

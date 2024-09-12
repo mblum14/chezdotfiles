@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+
+function install_golang() {
+  local tarfile=go{{ .languages.go }}.{{ .chezmoi.os }}-{{.chezmoi.arch}}.tar.gz
+  mkdir -p {{ .dev_mount }}/.local/src
+  cd {{ .dev_mount }}/.local/src
+  sudo rm -rf /usr/local/go
+  wget "https://go.dev/dl/${tarfile}" --directory-prefix {{ .dev_mount }}/.local/src
+  tar -C {{ .dev_mount }}/.local/src -xf "${tarfile}"
+  sudo ln -fs {{ .dev_mount }}/.local/src/go/bin/* /usr/local/bin
+  rm "${tarfile}"
+}
+
+install_golang

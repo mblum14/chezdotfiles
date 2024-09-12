@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+
+sudo dnf group install -y "Development Tools" "C Development Tools and Libraries"
+sudo dnf install -y {{ .packages.dnf | quoteList | join " " }}

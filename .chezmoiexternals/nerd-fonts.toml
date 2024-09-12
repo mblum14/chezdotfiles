@@ -1,0 +1,5 @@
+[".local/src/nerd-fonts"]
+type = "git-repo"
+url = "https://github.com/ryanoasis/nerd-fonts.git"
+refreshPeriod = "168h"
+clone.args = ["--depth", "1"]

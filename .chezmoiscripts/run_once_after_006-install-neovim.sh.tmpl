@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+cd {{ .dev_mount }}/.local/src/neovim
+make CMAKE_BUILD_TYPE=Release
+make CMAKE_INSTALL_PREFIX={{ .dev_mount }}/.local/src/nvim install

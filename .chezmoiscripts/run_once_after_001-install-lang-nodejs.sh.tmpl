@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+
+function install_nodejs() {
+  # remove nvm
+  if [[ -d {{ .dev_mount }}/.nvm ]]; then
+    nvm unload
+    rm -rf {{ .dev_mount }}/.nvm
+  fi
+
+  # install volta
+  curl https://get.volta.sh | bash
+
+  volta install node
+}
+
+install_nodejs

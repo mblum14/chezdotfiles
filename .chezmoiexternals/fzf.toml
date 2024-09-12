@@ -1,0 +1,5 @@
+[".fzf"]
+type = "git-repo"
+url = "https://github.com/junegunn/fzf.git"
+refreshPeriod = "168h"
+clone.args = ["--depth", "1", "--branch", "v0.55.0"]

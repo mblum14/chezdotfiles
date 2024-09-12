@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+source "${BASH_SOURCE%/*}/lib/log.sh"
+
+SAMPLE_TEXT="${1:-SAMPLE TEXT}"
+
+while IFS= read -r font; do
+	log::header "${font}"
+	figlet -f "${font}" "${SAMPLE_TEXT}"
+done < <(figlet --list)

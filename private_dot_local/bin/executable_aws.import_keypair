@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+
+aws ec2 import-key-pair \
+  --key-name "${USER}" \
+  --public-key-material "$(base64 <~/.ssh/id_rsa.pub)" \
+  --tag-specification "ResourceType=key-pair,Tags=[{Key=ManagedBy,Value=${USER}}]"

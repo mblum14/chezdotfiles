@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+
+gem install --no-document {{ .packages.gem | quoteList | join " " }}

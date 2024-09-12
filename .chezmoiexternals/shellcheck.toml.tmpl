@@ -1,0 +1,5 @@
+{{ $shellcheckVersion := "v0.10.0" }}
+[".local/bin/shellcheck"]
+type = "archive-file"
+url = "https://github.com/koalaman/shellcheck/releases/download/{{ $shellcheckVersion }}/shellcheck-{{ $shellcheckVersion }}.{{ .chezmoi.os }}.x86_64.tar.xz"
+path = "shellcheck-{{ $shellcheckVersion }}/shellcheck"

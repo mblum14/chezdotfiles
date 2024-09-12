@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+#[T]erra[F]orm.[C]lear [C]ache
+
+find {{ .dev_mount }}/code/ -type d -name '.terraform' -delete

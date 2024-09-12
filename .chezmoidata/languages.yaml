@@ -1,0 +1,4 @@
+languages:
+  ruby: 3.1.6
+  python: 3.11
+  go: 1.22.0

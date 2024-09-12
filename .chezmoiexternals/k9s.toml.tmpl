@@ -1,0 +1,5 @@
+{{ $k9sVersion := "0.32.4" }}
+[".local/bin/k9s"]
+type = "archive-file"
+url = "https://github.com/derailed/k9s/releases/download/v{{ $k9sVersion }}/k9s_{{ .chezmoi.os }}_{{ .chezmoi.arch }}.tar.gz"
+path = "k9s"

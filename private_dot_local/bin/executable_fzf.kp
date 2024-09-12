@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# [K]ill [P]rocess
+
+pids=$(ps -ef | sed 1d | fzf-tmux -p -m -- --exit-0 | awk '{print $2}')
+
+for pid in $pids; do
+  echo "${pid}" | xargs kill -9
+done

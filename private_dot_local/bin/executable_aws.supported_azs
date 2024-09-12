@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+
+source "${BASH_SOURCE%/*}/lib/log.sh"
+
+# Instance type for which to test availability
+INSTANCE_TYPE="m5.large"
+
+function help() {
+	echo "aws.supported_azs [-r|--region] [-t|--instance-type]"
+}
+
+while [[ $# -gt 0 ]]; do
+	case $1 in
+	-r | --region)
+		shift
+		REGIONS=$1
+		;;
+	-t | --instance-type)
+		shift
+		INSTANCE_TYPE=$1
+		;;
+	*)
+		log::err "Unsupported flag, $1"
+		help
+		exit 1
+		break
+		;;
+	esac
+	shift
+done
+
+if [[ -z $REGIONS ]]; then
+	# Get all regions
+	REGIONS=$(aws ec2 describe-regions | jq '.[][].RegionName' | tr -d '"' | sort)
+fi
+
+for REGION in $REGIONS; do
+
+	log::header "AZs in ${REGION}:"
+
+	# Get all AZs in a region
+	ALL_AZS=$(aws ec2 describe-availability-zones --region "${REGION}" | jq '.[][].ZoneId' | tr -d '"' | sort)
+
+	# Get all AZs that support the instance type
+	SUPPORTED_AZS=$(aws ec2 describe-instance-type-offerings \
+		--location-type availability-zone-id \
+		--filters Name=instance-type,Values="${INSTANCE_TYPE}" \
+		--region "${REGION}" |
+		jq '.[][].Location' | tr -d '"' | sort)
+
+	# Annotate which AZs do not support the instance type
+	for AZ in $ALL_AZS; do
+		if echo $SUPPORTED_AZS | grep -q $AZ; then
+			echo "* ${AZ}"
+		else
+			echo "* ${AZ} (${INSTANCE_TYPE} not supported)"
+		fi
+	done
+
+done

@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+
+function install_rust() {
+  mkdir {{ .dev_mount }}/.cargo
+  ln -fs {{ .dev_mount }}/.cargo ~/.cargo
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs >sh.rustup.rs
+  chmod +x sh.rustup.rs
+  sudo ./sh.rustup.rs
+  source "$HOME/.cargo/env"
+  rustup default stable
+}
+
+install_rust

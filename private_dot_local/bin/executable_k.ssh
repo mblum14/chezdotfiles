@@ -1,0 +1,278 @@
+#!/usr/bin/env bash
+# Given a K8s Namespace (optional) and Pod name (via stdin from running "kubectl get pod [-n <namespace>] <pod name> -o json"),
+#  open an SSH session to that pod's underlying node
+
+set -o nounset
+
+source "${BASH_SOURCE%/*}/lib/k8s.sh"
+source "${BASH_SOURCE%/*}/lib/log.sh"
+
+function dependency_check() {
+  if ! which jq >/dev/null 2>&1; then
+    log::err "unable to find required dependency: jq.\nPlease install jq with:\n\tyuym -y install jq\n"
+  fi
+}
+
+function usage() {
+  echo -e ""
+  echo -e "DESCRIPTION:\n"
+  echo -e "\tA tool for opening an SSH connection to the node of a given K8s pod running on an AWS EC2 instance."
+  echo -e ""
+  echo -e "USAGE:\n"
+  echo -e "Pipe 'kubectl get pod' output into this program (recommended):"
+  echo -e "\tkubectl get pod [-n <namespace>] <pod-name> -o json | ssh_to_pod_node [-u|--user <ssh-user>] [-i|--identity-file <identity-file>]"
+  echo -e "Specify exact pod name and namespace (optional) via parameters:"
+  echo -e "\tssh_to_pod_node [-n <namespace>] [-u|--user <ssh-user>] [-i|--identity-file <identity-file>] [-p <pod-name>]"
+  echo -e "Specify exact node name:"
+  echo -e "\tssh_to_pod_node [-n <namespace>] [-u|--user <ssh-user>] [-i|--identity-file <identity-file>] [-d <node-name>]"
+}
+
+function validate() {
+  if [[ -n $identity_file && ! -f $identity_file ]]; then
+    log::err "you passed an identity file, but it is not accessible by this script: ${identity_file}. Aborting."
+    exit 1
+  fi
+
+  if [[ -z $pod_name ]]; then
+    log::err "you must specify a pod name, either by passing it as the first positional argument, or passing the output of 'kubectl get pod <pod> -o json' to the script via STDIN."
+    exit 1
+  fi
+
+  if [[ -z $user ]]; then
+    log::err "you must specify the SSH user."
+    exit 1
+  fi
+
+  if [[ -p /dev/stdin && -z ${SSH_TTY+x} && -z ${ORIG_TTY+x} ]]; then
+    log::err "you're piping input to this program, but we won't be able to figure out which TTY to switch back to for the SSH session.\nPlease set the 'ORIG_TTY' environment variable before running this program\n\texport ORIG_TTY=\$(tty)"
+    exit 1
+  fi
+}
+
+function parse_json_input() {
+  if [[ -z $json_input ]]; then
+    return 0
+  fi
+
+  if ! jq -e . >/dev/null 2>&1 <<<"${json_input}"; then
+    log::err "Invalid json was passed via STDIN.\nHint: did you forget to pass '-o json' when running 'kubectl get pod'?"
+    return 1
+  fi
+
+  if ! node_name=$(jq -r '.spec.nodeName' <<<"${json_input}"); then
+    log::err "tried to get 'spec.nodeName' keypath and failed."
+    return 1
+  elif [[ -z "${node_name}" || "${node_name}" == 'null' ]]; then
+    log::err "the 'spec.nodeName' keypath was not found."
+    return 1
+  fi
+
+  if ! pod_name=$(jq -r '.metadata.name' <<<"${json_input}"); then
+    log::err "tried to get 'metadata.name' keypath and failed."
+    return 1
+  elif [[ -z "${pod_name}" || "${pod_name}" == 'null' ]]; then
+    log::err "the 'metadata.name' keypath was not found."
+    return 1
+  fi
+
+  if ! container_name=$(jq -r '.spec.containers[0].name' <<<"${json_input}"); then
+    log::err "tried to get 'spec.containers[0].name' keypath and failed."
+    return 1
+  elif [[ -z "${container_name}" || "${container_name}" == 'null' ]]; then
+    log::err "the 'spec.containers[0].name' keypath was not found."
+    return 1
+  fi
+}
+
+function reset_stdin_to_tty() {
+  # Redirect stdin back to tty, so we can use it with SSH
+  if [[ -n ${SSH_TTY+x} ]]; then
+    exec 0<"${SSH_TTY}"
+  elif [[ -n ${ORIG_TTY+x} ]]; then
+    exec 0<"${ORIG_TTY}"
+  else
+    log::err "unable to identify a valid TTY to switch STDIN back to."
+    return 1
+  fi
+}
+
+function get_security_group_of_instance() {
+  local private_dns_name=$1
+  local instance_security_group
+
+  # We just grab the security group from the output of 'describe'; we assume there is only one security group
+  instance_security_group=$(AWS_PROFILE="${aws_profile}" aws ec2 describe-instances --filters "Name=network-interface.private-dns-name,Values=\"${private_dns_name}\"" | jq -r '.Reservations[0].Instances[0].SecurityGroups[0].GroupId')
+  if [[ $? -ne 0 || -z $instance_security_group ]]; then
+    echo -e "failed to retrieve EC2 instance ID corresponding to private DNS name: ${private_dns_name}"
+    return 1
+  fi
+
+  echo -e "${instance_security_group}"
+}
+
+function open_ssh_port_to_ec2() {
+  local private_dns_name=$1
+  local instance_security_group
+
+  if ! instance_security_group=$(get_security_group_of_instance "${private_dns_name}"); then
+    echo -e "failed to open SSH to EC2: ${private_dns_name}"
+    return 1
+  fi
+
+  # Check if we already have a rule for us
+  existing_rules=$(AWS_PROFILE="${aws_profile}" aws ec2 describe-security-group-rules --filters "Name=group-id,Values=\"${instance_security_group}\"")
+  existing_matching_rule=$(echo "${existing_rules}" | jq -r ".SecurityGroupRules[] | select(.FromPort==22 and .ToPort==22 and .CidrIpv4==\"${ipv4_addr}\/32\")")
+
+  if [[ -n $existing_matching_rule ]]; then
+    echo -e "WARNING: found existing matching security group rule for ${ipv4_addr}\/32; skipping ingress authorization."
+    return 0
+  fi
+
+  AWS_PROFILE="${aws_profile}" aws ec2 authorize-security-group-ingress --group-id "${instance_security_group}" --ip-permissions IpProtocol=tcp,FromPort=22,ToPort=22,IpRanges="[{CidrIp=${ipv4_addr}/32,Description='One-time rule for ${ipv4_addr}'}]"
+  if [[ $? -eq 0 ]]; then
+    echo -e "Created temporary ingress rule for SSH in the security group for ${private_dns_name}."
+  else
+    log::err "failed to create temporary ingress rule for SSH in the security group for ${private_dns_name}."
+    exit 1
+  fi
+}
+
+function close_ssh_port_to_ec2() {
+  local private_dns_name=$1
+  local instance_security_group
+
+  if ! instance_security_group=$(get_security_group_of_instance "${private_dns_name}"); then
+    echo -e "failed to open SSH to EC2: ${private_dns_name}"
+    return 1
+  fi
+
+  AWS_PROFILE="${aws_profile}" aws ec2 revoke-security-group-ingress --group-id "${instance_security_group}" --ip-permissions IpProtocol=tcp,FromPort=22,ToPort=22,IpRanges="[{CidrIp=${ipv4_addr}/32,Description='One-time rule for ${ipv4_addr}'}]"
+  if [[ $? -eq 0 ]]; then
+    echo -e "Removed temporary ingress rule for SSH in the security group for ${private_dns_name}."
+  else
+    log::err "failed to remove temporary ingress rule for SSH in the security group for ${private_dns_name}."
+    log::err "Please examine the security group for ${private_dns_name} to ensure it has been removed."
+    exit 1
+  fi
+}
+
+POSITIONAL=()
+verbose=0
+namespace=
+user=ec2-user
+identity_file=
+identity_file_param=
+pod_name=
+current_context=$(kubectl config view -o jsonpath='{.current-context}')
+aws_profile=$(k8s::context_to_profile "${current_context}")
+
+# Static
+ipv4_addr=$(ip addr show dev eth0 | grep -oP 'inet\s[0-9]+(\.[0-9]+){3}' | sed -r 's/inet\s+//')
+
+if [ ! -p /dev/stdin ]; then
+  # Not interactive
+  json_input=
+else
+  IFS='' read -d '' -r json_input
+fi
+
+while [[ $# -gt 0 ]]; do
+  key="$1"
+
+  case $key in
+  -v | --verbose)
+    verbose=1
+    ;;
+  -h | --help)
+    usage
+    exit 0
+    ;;
+  -n | --namespace)
+    namespace="${2}"
+    namespace_param="-n ${2}"
+    shift
+    ;;
+  -p | --pod-name)
+    pod_name="${2}"
+    shift
+    ;;
+  -d | --node-name)
+    node_name="${2}"
+    shift
+    ;;
+  -u | --user)
+    user="${2}"
+    shift
+    ;;
+  -i | --identity-file)
+    identity_file="${2}"
+    identity_file_param="-i ${2}"
+    shift
+    ;;
+  -a | --aws-profile)
+    aws_profile="${2}"
+    shift
+    ;;
+  -*)
+    log::err "unknown option: ${key}"
+    exit 1
+    ;;
+  *)
+    POSITIONAL+=("${1}")
+    ;;
+  esac
+  shift
+done
+
+dependency_check
+
+if [[ -z ${node_name+x} ]]; then
+  parse_json_input
+
+  if ! validate; then
+    exit 1
+  fi
+
+  if [[ -z $json_input ]]; then
+    json_input=$(kubectl get pod ${namespace_param} ${pod_name} -o json)
+  fi
+  parse_json_input
+fi
+
+if [[ -z $aws_profile ]]; then
+  log::err "the aws profile to use is empty; please pass it or set your kube config context to something we can understand."
+  exit 1
+fi
+
+reset_stdin_to_tty
+
+open_ssh_port_to_ec2 $node_name
+log::info "### Opening an SSH session to\e[0m \e[31m${node_name}\e[0m\e[32m.\e[0m"
+log::info "### Please remember to cleanly exit, so we can clean up the SSH rule we created in the node's security group."
+
+ssh_cmd=bash
+
+# Check if the user can sudo without a password
+log::info "SSH'ing with:\n\tssh -q ${identity_file_param} ${user}@${node_name}\n\n"
+
+actual_user="${user}"
+
+ssh -o StrictHostKeychecking=no -o UserKnownHostsFile=/dev/null -q "${identity_file_param}" "${user}@${node_name}" sudo -n true
+if [[ $? -eq 0 && -n ${container_name+x} ]]; then
+  docker_filter_cmd="sudo docker ps -aq --filter 'label=io.kubernetes.pod.name=${pod_name}' --filter 'label=io.kubernetes.container.name=${container_name}'"
+  pod_docker_id=$(ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeychecking=no -q ${identity_file_param} ${user}@${node_name} ${docker_filter_cmd} 2>/dev/null)
+  if [[ $? -eq 0 && -n $pod_docker_id ]]; then
+    log::info "### If you'd like to 'docker exec' into the exact pod you passed in, you can run:"
+    echo -e "\n\tdocker exec -it ${pod_docker_id} bash"
+    echo -e "\n\t\tor (if bash is not an available shell in the container)"
+    echo -e "\n\tdocker exec -it ${pod_docker_id} sh"
+    echo -e ""
+
+    ssh_cmd='sudo -i'
+    actual_user='root'
+  fi
+fi
+
+log::header "Welcome to ${node_name}, ${actual_user}. Please remember to exit when you are done, and enjoy your stay. *-*-*"
+ssh -o StrictHostKeychecking=no -o UserKnownHostsFile=/dev/null -qt ${identity_file_param} "${user}@${node_name}" ${ssh_cmd}
+close_ssh_port_to_ec2 "${node_name}"

@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+
+function install_python() {
+  export PYENV_ROOT={{ .dev_mount }}/.pyenv
+
+  curl https://pyenv.run | bash
+
+  pyenv init -
+  pyenv install {{ .languages.python }}
+  pyenv global {{ .languages.python }}
+
+  python -m pip install setuptools
+}
+
+install_python

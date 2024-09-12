@@ -1,0 +1,4 @@
+[".tfenv"]
+type = "git-repo"
+url = "https://github.com/tfutils/tfenv.git"
+refreshPeriod = "168h"
