@@ -14,4 +14,5 @@ vim.opt.undolevels = 1000
 vim.opt.undoreload = 10000
 
 vim.g.python3_host_prog = "/alt/.pyenv/shims/python3"
+vim.g.lazyvim_python_lsp = "pyright"
 vim.g.ruby_host_prog = "~/bin/neovim-ruby-host"
