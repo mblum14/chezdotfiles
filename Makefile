@@ -10,8 +10,9 @@ lazy_lock:
 	cp ~/.local/share/chezmoi/lazy-lock.json private_dot_config/nvim/
 
 nvim_state.tar.gz: nvim lazy_lock
-	unlink ~/.local/nvim/lazy-lock.json
-	cp ~/.local/share/chezmoi/lazy-lock.json ~/.config/nvim/
-	tar -czf nvim_state.tar.gz ~/.local/state/nvim/ ~/.local/share/nvim ~/.config/nvim
-	rm ~/.local/nvim/lazy-lock.json
+	unlink ~/.config/nvim/lazy-lock.json
+	cur_dir=$(shell pwd)
+	cp $(HOME)/.local/share/chezmoi/lazy-lock.json ~/.config/nvim/
+	tar -czf nvim_state.tar.gz -C $(HOME) .local/state/nvim/ .local/share/nvim .config/nvim
+	rm ~/.config/nvim/lazy-lock.json
 	ln -s ~/.local/share/chezmoi/lazy-lock.json ~/.config/nvim/
