@@ -1,4 +1,4 @@
-default: nvim_state.tar.gz
+default: build
 
 .PHONY: nvim
 nvim: ~/.config/nvim
@@ -16,3 +16,8 @@ nvim_state.tar.gz: nvim lazy_lock
 	tar -czf nvim_state.tar.gz -C $(HOME) .local/state/nvim/ .local/share/nvim .config/nvim -C /alt .local/nvim
 	rm ~/.config/nvim/lazy-lock.json
 	ln -s ~/.local/share/chezmoi/lazy-lock.json ~/.config/nvim/
+
+tmux_state.tar.gz: private_dot_config/tmux/tmux.conf
+	tar -czf tmux_state.tar.gz -C $(HOME) .config/tmux
+
+build: nvim_state.tar.gz tmux_state.tar.gz
